@@ -1,0 +1,5 @@
+{
+  "name": "AN-NAML / RCA Purchases Module",
+  "description": "A web application for managing Purchase Requests, Purchase Orders, and Purchase Invoices for AN-NAML / RCA.",
+  "requestFramePermissions": []
+}
