@@ -1,9 +1,6 @@
-
 import React from 'react';
+import { Page } from '../App';
 import { BotMessageSquareIcon, FileTextIcon, ShoppingCartIcon, ArchiveIcon, Building2Icon, SettingsIcon, LayoutDashboardIcon } from './icons';
-
-// FIX: Define the Page type locally as it is not exported from App.tsx and is specific to this sidebar's navigation.
-export type Page = 'dashboard' | 'pr' | 'po' | 'pi' | 'inventory' | 'vendors' | 'settings';
 
 interface SidebarProps {
   currentPage: Page;
