@@ -1,13 +1,62 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { mockPurchaseRequests, PurchaseRequest } from '../data/mockData';
+import { mockPurchaseRequests } from '../data/mockData';
 import StatusPill from '../components/StatusPill';
 import { PlusCircleIcon, Trash2Icon, LinkIcon, ImageIcon } from '../components/icons';
+import { saveOrUpdatePR } from '../lib/prStorage';
+// FIX: Import `PRStatus` to resolve 'Cannot find name' error.
+import { PurchaseRequest, PRItem, PRStatus } from '../types/purchases';
+
+
+// Helper to map from old data structure to new localStorage structure
+function mapToStorageFormat(req: any, newStatus?: PRStatus): PurchaseRequest {
+    const subtotal = req.items.reduce((acc: number, item: any) => acc + (item.total || 0), 0);
+    // Note: This is a simplified tax calculation. A more robust solution would be needed for production.
+    const tax = req.items.reduce((acc: number, item: any) => acc + (item.taxCode === 'PPN11' ? (item.total || 0) * 0.11 : 0), 0);
+    const total = subtotal + tax;
+
+    return {
+        id: req.id,
+        number: req.requestNumber,
+        schoolDivision: req.division,
+        pic: req.pic,
+        dateOfUse: req.dateOfUse,
+        purpose: req.purpose,
+        dateRequest: req.dateRequest,
+        neededDate: req.neededDate,
+        shippingAddress: req.shippingAddress,
+        items: req.items.map((it: any): PRItem => ({
+            id: it.id,
+            monthYear: it.monthYearForUse,
+            name: it.itemName,
+            brand: it.merkType,
+            spec: it.specification,
+            qty: it.quantity,
+            unit: it.unit,
+            price: it.pricePerUnit,
+            link: it.purchaseLink,
+            userPic: it.userPIC,
+            location: it.location,
+            notes: it.notes,
+            taxCode: "PPN11", // default
+        })),
+        subtotal,
+        tax,
+        total: req.totalAmount,
+        status: newStatus || req.status.toUpperCase(),
+        reviewer: req.reviewer,
+        approver: req.approver,
+        reviewerNotes: req.reviewerNotes,
+        createdAt: req.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+    };
+}
+
 
 const PurchaseRequestForm: React.FC<{
-  request: PurchaseRequest | null;
+  request: any; // Using 'any' to bridge old and new types
   onClose: () => void;
-  onUpdate: (request: PurchaseRequest) => void;
-  onCreatePo: (request: PurchaseRequest) => void;
+  onUpdate: (request: any) => void;
+  onCreatePo: (request: any) => void;
 }> = ({ request, onClose, onUpdate, onCreatePo }) => {
   const [reviewerNotesInput, setReviewerNotesInput] = useState('');
   
@@ -42,46 +91,55 @@ const PurchaseRequestForm: React.FC<{
 
   const handleSubmitForApproval = () => {
     if (request) {
-      onUpdate({ ...request, status: 'Submitted' });
+      const updatedRequest = { ...request, status: 'Submitted' };
+      onUpdate(updatedRequest);
+      saveOrUpdatePR(mapToStorageFormat(updatedRequest, 'SUBMITTED'));
     }
   };
 
   const handleReview = () => {
     if (request) {
-      onUpdate({
+      const updatedRequest = {
         ...request,
         status: 'Reviewed',
         reviewer: 'John Doe',
         reviewerNotes: reviewerNotesInput,
-      });
+      };
+      onUpdate(updatedRequest);
+      saveOrUpdatePR(mapToStorageFormat(updatedRequest, 'REVIEWED'));
     }
   };
 
   const handleApprove = () => {
     if (request) {
-      onUpdate({
+      const updatedRequest = {
         ...request,
         status: 'Approved',
         approver: 'Jane Smith',
-        reviewerNotes: reviewerNotesInput, // Persist notes on approval too
-      });
+        reviewerNotes: reviewerNotesInput,
+      };
+      onUpdate(updatedRequest);
+      saveOrUpdatePR(mapToStorageFormat(updatedRequest, 'APPROVED'));
     }
   };
 
   const handleReject = () => {
     if (request) {
-      onUpdate({
+      const updatedRequest = {
         ...request,
         status: 'Rejected',
-        reviewer: 'John Doe', // The person rejecting is the reviewer
+        reviewer: 'John Doe',
         reviewerNotes: reviewerNotesInput,
-      });
+      };
+      onUpdate(updatedRequest);
+      saveOrUpdatePR(mapToStorageFormat(updatedRequest, 'REJECTED'));
     }
   };
 
   const handleSaveDraft = () => {
     if (request) {
-      onUpdate(request); // Simply pass the current state up
+      onUpdate(request);
+      saveOrUpdatePR(mapToStorageFormat(request, 'DRAFT'));
     }
   };
   
@@ -169,7 +227,7 @@ const PurchaseRequestForm: React.FC<{
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-800 bg-gray-900">
-                            {request.items.map((item, index) => (
+                            {request.items.map((item: any, index: number) => (
                                 <tr key={item.id}>
                                     <td className="px-3 py-3 text-gray-400">{index + 1}</td>
                                     <td className="px-3 py-3 text-gray-300">{item.monthYearForUse}</td>
@@ -270,11 +328,15 @@ const PurchaseRequestForm: React.FC<{
 };
 
 
-const PurchaseRequestPage: React.FC<{ onCreatePo: (pr: PurchaseRequest) => void; }> = ({ onCreatePo }) => {
-    const [requests, setRequests] = useState<PurchaseRequest[]>(mockPurchaseRequests);
-    const [selectedRequest, setSelectedRequest] = useState<PurchaseRequest | null>(requests.find(r => r.status === 'Submitted') || requests[0]);
+const PurchaseRequestPage: React.FC<{ onCreatePo: (pr: any) => void; }> = ({ onCreatePo }) => {
+    // Add stable identity state for new drafts
+    const [prId] = React.useState(crypto.randomUUID());
+    const [createdAt] = React.useState(new Date().toISOString());
 
-    const handleSelectRequest = (request: PurchaseRequest) => {
+    const [requests, setRequests] = useState<any[]>(mockPurchaseRequests);
+    const [selectedRequest, setSelectedRequest] = useState<any | null>(requests.find(r => r.status === 'Submitted') || requests[0]);
+
+    const handleSelectRequest = (request: any) => {
         setSelectedRequest(request);
     };
 
@@ -282,8 +344,9 @@ const PurchaseRequestPage: React.FC<{ onCreatePo: (pr: PurchaseRequest) => void;
         const date = new Date();
         const requestNumber = `PR-${date.getFullYear()}${(date.getMonth() + 1).toString().padStart(2, '0')}${date.getDate().toString().padStart(2, '0')}-${Math.floor(1000 + Math.random() * 9000)}`;
         
-        const newRequest: PurchaseRequest = {
-            id: `pr_${date.getTime()}`,
+        const newRequest = {
+            id: prId,
+            createdAt: createdAt,
             requestNumber,
             division: '',
             pic: 'Nike Eka F', // Default to current user
@@ -302,12 +365,16 @@ const PurchaseRequestPage: React.FC<{ onCreatePo: (pr: PurchaseRequest) => void;
 
         setRequests(prev => [newRequest, ...prev]);
         setSelectedRequest(newRequest);
+        // Persist the new draft immediately
+        saveOrUpdatePR(mapToStorageFormat(newRequest, 'DRAFT'));
     };
 
-    const handleUpdateRequest = (updatedRequest: PurchaseRequest) => {
+    const handleUpdateRequest = (updatedRequest: any) => {
         const newRequests = requests.map(r => (r.id === updatedRequest.id ? updatedRequest : r));
         setRequests(newRequests);
         setSelectedRequest(updatedRequest);
+        // Note: Specific status updates are handled in the form's action handlers
+        // This handler now primarily updates the in-memory state for the UI
     };
 
     const formatCurrency = (amount: number) => {

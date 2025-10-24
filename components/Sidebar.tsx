@@ -14,7 +14,7 @@ const NavItem: React.FC<{
   currentPage: Page;
   onClick: (page: Page) => void;
 }> = ({ icon, label, page, currentPage, onClick }) => {
-  const isActive = currentPage === page;
+  const isActive = currentPage === page || (currentPage === 'pr-form' && page === 'pr-list');
   return (
     <button
       onClick={() => onClick(page)}
@@ -53,7 +53,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setCurrentPage }) => {
         <NavItem
           icon={<FileTextIcon className="w-5 h-5" />}
           label="Purchase Requests"
-          page="pr"
+          page="pr-list"
           currentPage={currentPage}
           onClick={setCurrentPage}
         />
